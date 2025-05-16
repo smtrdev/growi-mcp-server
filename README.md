@@ -1,6 +1,6 @@
 # GROWI MCP Server
 
-This Model Context Protocol (MCP) server provides integration between Claude Desktop and [GROWI](https://github.com/weseek/growi), a modern Wiki system. It allows Claude AI to interact with GROWI wikis - listing, reading, creating, updating, and searching pages.
+This Model Context Protocol (MCP) server provides [GROWI](https://github.com/weseek/growi) integration.
 
 ## Features
 
