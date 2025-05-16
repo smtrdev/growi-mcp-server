@@ -9,6 +9,12 @@ import { GrowiClient } from './growi-client.js';
 // Import tool schemas and implementations
 import { listPages, listPagesSchema } from './tools/list-pages.js';
 
+// Redirect all console logs to stderr to ensure clean JSON output on stdout
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+console.log = (...args) => originalConsoleError(...args);
+console.error = (...args) => originalConsoleError(...args);
+
 // Load environment variables
 dotenv.config();
 
@@ -80,37 +86,59 @@ function zodToJsonSchema(schema: z.ZodType<any, any, any>) {
   return outputSchema;
 }
 
-// Register tools
+// Register tools - this is for the MCP 'tools/list' method
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: 'growi_list_pages',
-        description: 'List GROWI pages under a specific path',
-        inputSchema: zodToJsonSchema(listPagesSchema),
-      },
-    ],
-  };
+  try {
+    console.log('📋 Handling tools/list request');
+    return {
+      tools: [
+        {
+          name: 'growi_list_pages',
+          description: 'List GROWI pages under a specific path',
+          inputSchema: zodToJsonSchema(listPagesSchema),
+        },
+      ],
+    };
+  } catch (error) {
+    console.error('❌ Error handling tools/list request:', error);
+    throw error;
+  }
 });
 
-// Tool call handler
+// Tool call handler - this is for the MCP 'tools/call' method
 server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
-  const { name, arguments: args } = request.params;
+  try {
+    const { name, arguments: args } = request.params;
+    console.log(`📋 Handling tools/call request for tool: ${name}`);
+    console.log(`📋 Tool arguments:`, JSON.stringify(args, null, 2));
 
-  switch (name) {
-    case 'growi_list_pages':
-      return await listPages(growiClient, args as any);
+    switch (name) {
+      case 'growi_list_pages':
+        return await listPages(growiClient, args as any);
 
-    default:
-      return {
-        isError: true,
-        content: [
-          {
-            type: 'text',
-            text: `Unknown tool: ${name}`,
-          },
-        ],
-      };
+      default:
+        console.error(`❌ Unknown tool requested: ${name}`);
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: `Unknown tool: ${name}`,
+            },
+          ],
+        };
+    }
+  } catch (error) {
+    console.error('❌ Error handling tools/call request:', error);
+    return {
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: `Error executing tool: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+    };
   }
 });
 

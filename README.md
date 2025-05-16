@@ -32,6 +32,7 @@ npm run build
 
 ## Usage 
 
+Add this configuration to your MCP client setup:
 
 ```json
 {
