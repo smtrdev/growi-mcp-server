@@ -1,7 +1,7 @@
 {
   "name": "growi-mcp-server",
   "description": "MCP Server for GROWI - a modern Wiki system",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Yutaro Shimamura",
   "bugs": {
     "url": "https://github.com/smtrdev/growi-mcp-server/issues"
