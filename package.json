@@ -14,20 +14,20 @@
   "author": "Yutaro Shimamura",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.11.3",
-    "axios": "^1.6.7",
-    "dotenv": "^16.4.1",
-    "zod": "^3.22.4"
+    "@modelcontextprotocol/sdk": "1.11.3",
+    "axios": "1.6.7",
+    "dotenv": "16.4.1",
+    "zod": "3.22.4"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.12",
-    "@types/node": "^20.11.10",
-    "@typescript-eslint/eslint-plugin": "^6.19.1",
-    "@typescript-eslint/parser": "^6.19.1",
-    "eslint": "^8.56.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.1.2",
-    "tsc-watch": "^6.0.4",
-    "typescript": "^5.3.3"
+    "@types/jest": "29.5.12",
+    "@types/node": "20.11.10",
+    "@typescript-eslint/eslint-plugin": "6.19.1",
+    "@typescript-eslint/parser": "6.19.1",
+    "eslint": "8.56.0",
+    "jest": "29.7.0",
+    "ts-jest": "29.1.2",
+    "tsc-watch": "6.0.4",
+    "typescript": "5.3.3"
   }
 } 
