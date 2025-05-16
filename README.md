@@ -1,6 +1,6 @@
 # GROWI MCP Server
 
-This Model Context Protocol (MCP) server provides [GROWI](https://github.com/weseek/growi) integration.
+This Model Context Protocol (MCP) server provides growi integration.
 
 ## Features
 
