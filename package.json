@@ -26,6 +26,9 @@
   "engines": {
     "node": ">=18.x"
   },
+  "files": [
+    "dist"
+  ],
   "homepage": "https://github.com/smtrdev/growi-mcp-server",
   "keywords": [
     "GROWI",
