@@ -1,18 +1,11 @@
 {
   "name": "growi-mcp-server",
-  "version": "0.1.0",
   "description": "MCP Server for GROWI - a modern Wiki system",
-  "main": "dist/index.js",
-  "type": "module",
-  "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc-watch --onSuccess \"node dist/index.js\"",
-    "lint": "eslint . --ext .ts",
-    "test": "jest"
-  },
+  "version": "0.1.0",
   "author": "Yutaro Shimamura",
-  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/smtrdev/growi-mcp-server/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.11.3",
     "axios": "1.6.7",
@@ -29,5 +22,30 @@
     "ts-jest": "29.1.2",
     "tsc-watch": "6.0.4",
     "typescript": "5.3.3"
-  }
-} 
+  },
+  "engines": {
+    "node": ">=18.x"
+  },
+  "homepage": "https://github.com/smtrdev/growi-mcp-server",
+  "keywords": [
+    "GROWI",
+    "Integration",
+    "MCP",
+    "Model Context Protocol",
+    "Wiki"
+  ],
+  "license": "MIT",
+  "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/smtrdev/growi-mcp-server.git"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc-watch --onSuccess \"node dist/index.js\"",
+    "lint": "eslint . --ext .ts",
+    "start": "node dist/index.js",
+    "test": "jest"
+  },
+  "type": "module"
+}
