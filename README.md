@@ -5,10 +5,7 @@ This Model Context Protocol (MCP) server provides integration between Claude Des
 ## Features
 
 - **List Pages**: List pages under a specific path
-- **Read Pages**: Read the content of specific wiki pages
-- **Create Pages**: Create new wiki pages with markdown content
-- **Update Pages**: Update existing wiki pages
-- **Search Pages**: Search for pages by keyword
+- And coming soon...
 
 ## Prerequisites
 
@@ -50,9 +47,6 @@ npm run build
   }
 }
 ```
-
-
-
 
 
 ## Using the Tools in Claude
