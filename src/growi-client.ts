@@ -72,8 +72,8 @@ export class GrowiClient {
       }
     });
     
-    // アクセストークンを直接追加 - クエリパラメータ方式
-    return url.toString() + `&access_token=${encodeURIComponent(this.apiToken)}`;
+    // アクセストークンをURLに追加しない
+    return url.toString();
   }
 
   /**
@@ -83,6 +83,9 @@ export class GrowiClient {
     return new Promise((resolve, reject) => {
       const parsedUrl = new URL(url);
       
+      // トークンデータをx-www-form-urlencodedデータとして準備
+      const postData = `access_token=${encodeURIComponent(this.apiToken)}`;
+
       // curlと同じリクエストオプションを使用
       const options = {
         hostname: parsedUrl.hostname,
@@ -91,12 +94,15 @@ export class GrowiClient {
         method: 'GET',
         headers: {
           'User-Agent': 'curl/8.7.1',
-          'Accept': '*/*'
+          'Accept': '*/*',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(postData)
         }
       };
 
       const safeToken = this.apiToken.substring(0, 5) + '...';
-      logToStderr(`Making native curl-like request to URL: ${parsedUrl.protocol}//${parsedUrl.hostname}${options.path.replace(this.apiToken, safeToken)}`);
+      logToStderr(`Making native curl-like request to URL: ${parsedUrl.protocol}//${parsedUrl.hostname}${options.path}`);
+      logToStderr(`Sending access_token in request body: ${safeToken}`);
       
       const requestModule = parsedUrl.protocol === 'https:' ? https : http;
       const req = requestModule.request(options, (res) => {
@@ -131,6 +137,8 @@ export class GrowiClient {
         reject(error);
       });
       
+      // Send the request with the access token in the body
+      req.write(postData);
       req.end();
     });
   }
