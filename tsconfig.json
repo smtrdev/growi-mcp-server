@@ -6,11 +6,11 @@
     "esModuleInterop": true,
     "strict": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDirs": ["./src", "./"],
     "declaration": true,
     "sourceMap": true,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "include": ["src/**/*", "jest.config.ts", "jest.setup.ts", "**/*.test.ts"],
+  "exclude": ["node_modules", "dist"]
 } 

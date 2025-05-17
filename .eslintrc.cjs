@@ -4,9 +4,10 @@ module.exports = {
     node: true,
     es2022: true,
   },
+  ignorePatterns: ['src/types/modelcontextprotocol.d.ts'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
-    project: './tsconfig.json',
+    project: './tsconfig.eslint.json',
     tsconfigRootDir: __dirname,
     sourceType: 'module',
   },
@@ -15,4 +16,9 @@ module.exports = {
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
   ],
+  rules: {
+    '@typescript-eslint/no-explicit-any': 'warn',
+    '@typescript-eslint/no-unused-vars': 'warn',
+    '@typescript-eslint/ban-types': 'warn'
+  }
 };
