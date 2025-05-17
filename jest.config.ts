@@ -8,6 +8,7 @@ const config: Config = {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   extensionsToTreatAsEsm: ['.ts'],
+  setupFilesAfterEnv: ['./jest.setup.ts'],
 };
 
 export default config;
