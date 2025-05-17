@@ -141,9 +141,9 @@ async function directGrowiRequest(path: string = '/', limit: number = 5, page: n
     url.searchParams.append('limit', String(limit));
     url.searchParams.append('page', String(page));
     
-    // 重要: クエリパラメータとしてトークンを直接追加
-    // URLSearchParamsを使わず、直接文字列に追加する
-    const urlString = url.toString() + `&access_token=${encodeURIComponent(apiToken)}`;
+    // アクセストークンはリクエストボディで送信
+    const urlString = url.toString();
+    const postData = `access_token=${encodeURIComponent(apiToken)}`;
     
     const parsedUrl = new URL(urlString);
     
@@ -155,13 +155,16 @@ async function directGrowiRequest(path: string = '/', limit: number = 5, page: n
       method: 'GET',
       headers: {
         'User-Agent': 'curl/8.7.1',
-        'Accept': '*/*'
+        'Accept': '*/*',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData)
       }
     };
     
     // トークンを隠した形でログ出力
     const safeToken = apiToken.substring(0, 5) + '...';
-    logger.info(`Direct curl request: ${parsedUrl.protocol}//${parsedUrl.hostname}${options.path.replace(apiToken, safeToken)}`);
+    logger.info(`Direct curl request: ${parsedUrl.protocol}//${parsedUrl.hostname}${options.path}`);
+    logger.info(`Sending access_token in request body: ${safeToken}`);
     
     // HTTPリクエスト実行
     const protocol = parsedUrl.protocol === 'https:' ? https : http;
@@ -230,6 +233,8 @@ async function directGrowiRequest(path: string = '/', limit: number = 5, page: n
       reject(error);
     });
     
+    // Send the request with the access token in the body
+    req.write(postData);
     req.end();
   });
 }

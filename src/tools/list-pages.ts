@@ -25,7 +25,10 @@ export type ListPagesParams = z.infer<typeof listPagesSchema>;
 function makeNativeHttpRequest(url: string, apiToken: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(url);
-    logToStderr(`Making native HTTP request to: ${url.replace(apiToken, apiToken.substring(0, 5) + '...')}`);
+    logToStderr(`Making native HTTP request to: ${url}`);
+    
+    // トークンデータをx-www-form-urlencodedデータとして準備
+    const postData = `access_token=${encodeURIComponent(apiToken)}`;
     
     const options = {
       hostname: parsedUrl.hostname,
@@ -35,8 +38,12 @@ function makeNativeHttpRequest(url: string, apiToken: string): Promise<any> {
       headers: {
         'User-Agent': 'curl/8.7.1', 
         'Accept': '*/*',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData)
       }
     };
+    
+    logToStderr(`Sending access_token in request body: ${apiToken.substring(0, 5)}...`);
     
     const protocol = parsedUrl.protocol === 'https:' ? https : http;
     const req = protocol.request(options, (res) => {
@@ -69,6 +76,8 @@ function makeNativeHttpRequest(url: string, apiToken: string): Promise<any> {
       reject(error);
     });
     
+    // Send the request with the access token in the body
+    req.write(postData);
     req.end();
   });
 }
@@ -147,10 +156,8 @@ export async function listPages(
       url.searchParams.append('limit', String(limit));
       url.searchParams.append('page', String(page));
       
-      // 重要: クエリパラメータとしてトークンを追加
-      // FIXME: Authorization headerを使用する
-      // 直接トークンを文字列に追加し、URLエンコードの問題を回避する
-      const urlString = url.toString() + `&access_token=${encodeURIComponent(apiToken)}`;
+      // トークンはリクエストボディで送信するため、URLには含めない
+      const urlString = url.toString();
       
       // 直接HTTPリクエストを行う
       const data = await makeNativeHttpRequest(urlString, apiToken);
