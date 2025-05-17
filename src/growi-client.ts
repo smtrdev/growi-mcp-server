@@ -231,4 +231,49 @@ export class GrowiClient {
       return this.formatErrorResponse<GrowiPagesResponse>(error);
     }
   }
-} 
+
+  /**
+   * Recently updated pages
+   * @param limit Number of pages to return
+   * @param offset Offset for pagination
+   */
+  async getRecentlyUpdatedPages(limit: number = 20, offset: number = 0): Promise<GrowiPagesResponse> {
+    try {
+      const data = await this.request<any>('get', '/_api/v3/pages/recent', {
+        limit,
+        offset,
+      });
+
+      return {
+        ok: true,
+        pages: Array.isArray(data.pages) ? data.pages.map((page: any) => ({
+          ...page,
+          _id: String(page._id),
+          path: String(page.path),
+          creator: {
+            _id: String(page.creator?._id || ''),
+            name: String(page.creator?.name || '')
+          },
+          revision: {
+            _id: String(page.revision?._id || ''),
+            body: String(page.revision?.body || ''),
+            author: {
+              _id: String(page.revision?.author?._id || ''),
+              name: String(page.revision?.author?.name || '')
+            },
+            createdAt: String(page.revision?.createdAt || '')
+          },
+          createdAt: String(page.createdAt || ''),
+          updatedAt: String(page.updatedAt || '')
+        })) : [],
+        meta: {
+          total: Number(data.totalCount || 0),
+          limit: Number(limit),
+          offset: Number(offset)
+        }
+      };
+    } catch (error: any) {
+      return this.formatErrorResponse<GrowiPagesResponse>(error);
+    }
+  }
+}
