@@ -60,6 +60,10 @@ Once configured, you can use the following commands in Claude Desktop:
 growi_list_pages can you list all pages under the /projects path?
 ```
 
+```
+/user のパスから10件取ってきて
+```
+
 And coming soon...
 
 ## Development
