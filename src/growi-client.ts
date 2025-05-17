@@ -45,17 +45,17 @@ export class GrowiClient {
 
   // エラーログ用ヘルパーメソッド
   private logAxiosError(error: AxiosError): void {
-    console.error('❌ Axios Error:', error.message);
+    console.error('Axios Error:', error.message);
     
     if (error.response) {
-      console.error('📡 Response Status:', error.response.status);
+      console.error('Response Status:', error.response.status);
       if (error.response.data) {
-        console.error('📡 Response Data:', typeof error.response.data === 'object' 
+        console.error('Response Data:', typeof error.response.data === 'object' 
           ? JSON.stringify(error.response.data) 
           : String(error.response.data));
       }
     } else if (error.request) {
-      console.error('❓ No response received from server');
+      console.error('No response received from server');
     }
   }
 
@@ -96,11 +96,11 @@ export class GrowiClient {
       };
 
       const safeToken = this.apiToken.substring(0, 5) + '...';
-      logToStderr(`🌐 Making native curl-like request to URL: ${parsedUrl.protocol}//${parsedUrl.hostname}${options.path.replace(this.apiToken, safeToken)}`);
+      logToStderr(`Making native curl-like request to URL: ${parsedUrl.protocol}//${parsedUrl.hostname}${options.path.replace(this.apiToken, safeToken)}`);
       
       const requestModule = parsedUrl.protocol === 'https:' ? https : http;
       const req = requestModule.request(options, (res) => {
-        logToStderr(`🔄 Response status: ${res.statusCode}`);
+        logToStderr(`Response status: ${res.statusCode}`);
         
         let data = '';
         res.on('data', (chunk) => {
@@ -108,13 +108,13 @@ export class GrowiClient {
         });
         
         res.on('end', () => {
-          logToStderr(`✅ Response completed. Data length: ${data.length}`);
+          logToStderr(`Response completed. Data length: ${data.length}`);
           
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
               const jsonData = JSON.parse(data);
               if (jsonData.pages) {
-                logToStderr(`📊 Got ${jsonData.pages.length} pages out of ${jsonData.totalCount} total`);
+                logToStderr(`Got ${jsonData.pages.length} pages out of ${jsonData.totalCount} total`);
               }
               resolve(jsonData as T);
             } catch (error) {
@@ -127,7 +127,7 @@ export class GrowiClient {
       });
       
       req.on('error', (error) => {
-        logToStderr(`❌ Native HTTP request failed: ${error.message}`);
+        logToStderr(`Native HTTP request failed: ${error.message}`);
         reject(error);
       });
       
@@ -151,7 +151,7 @@ export class GrowiClient {
       // Use the curl-like native HTTP request 
       return await this.makeNativeCurlRequest<T>(url);
     } catch (error: any) {
-      logToStderr(`❌ Request failed for ${endpoint}: ${error.message}`);
+      logToStderr(`Request failed for ${endpoint}: ${error.message}`);
       throw error;
     }
   }

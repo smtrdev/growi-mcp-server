@@ -25,7 +25,7 @@ export type ListPagesParams = z.infer<typeof listPagesSchema>;
 function makeNativeHttpRequest(url: string, apiToken: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(url);
-    logToStderr(`🌐 Making native HTTP request to: ${url.replace(apiToken, apiToken.substring(0, 5) + '...')}`);
+    logToStderr(`Making native HTTP request to: ${url.replace(apiToken, apiToken.substring(0, 5) + '...')}`);
     
     const options = {
       hostname: parsedUrl.hostname,
@@ -40,7 +40,7 @@ function makeNativeHttpRequest(url: string, apiToken: string): Promise<any> {
     
     const protocol = parsedUrl.protocol === 'https:' ? https : http;
     const req = protocol.request(options, (res) => {
-      logToStderr(`🔄 Response status: ${res.statusCode}`);
+      logToStderr(`Response status: ${res.statusCode}`);
       
       let data = '';
       res.on('data', (chunk) => {
@@ -48,12 +48,12 @@ function makeNativeHttpRequest(url: string, apiToken: string): Promise<any> {
       });
       
       res.on('end', () => {
-        logToStderr(`✅ Response completed. Data length: ${data.length}`);
+        logToStderr(`Response completed. Data length: ${data.length}`);
         
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
           try {
             const jsonData = JSON.parse(data);
-            logToStderr(`📊 Got ${jsonData.pages?.length || 0} pages out of ${jsonData.totalCount || 0} total`);
+            logToStderr(`Got ${jsonData.pages?.length || 0} pages out of ${jsonData.totalCount || 0} total`);
             resolve(jsonData);
           } catch (error) {
             reject(new Error(`Failed to parse JSON: ${error instanceof Error ? error.message : String(error)}`));
@@ -65,7 +65,7 @@ function makeNativeHttpRequest(url: string, apiToken: string): Promise<any> {
     });
     
     req.on('error', (error) => {
-      logToStderr(`❌ Request failed: ${error.message}`);
+      logToStderr(`Request failed: ${error.message}`);
       reject(error);
     });
     
@@ -96,7 +96,7 @@ export async function listPages(
       if (params.limit !== undefined) {
         if (typeof params.limit === 'string') {
           limit = parseInt(params.limit, 10);
-          logToStderr(`📝 Converted string limit to number: ${limit}`);
+          logToStderr(`Converted string limit to number: ${limit}`);
         } else if (typeof params.limit === 'number') {
           limit = params.limit;
         }
@@ -104,10 +104,10 @@ export async function listPages(
         // Ensure limit is within reasonable bounds
         if (isNaN(limit) || limit < 1) {
           limit = 100;
-          logToStderr(`⚠️ Invalid limit value, reset to default: ${limit}`);
+          logToStderr(`Invalid limit value, reset to default: ${limit}`);
         } else if (limit > 1000) {
           limit = 1000;
-          logToStderr(`⚠️ Limit too large, capped at: ${limit}`);
+          logToStderr(`Limit too large, capped at: ${limit}`);
         }
       }
 
@@ -115,7 +115,7 @@ export async function listPages(
       if (params.page !== undefined) {
         if (typeof params.page === 'string') {
           page = parseInt(params.page, 10);
-          logToStderr(`📝 Converted string page to number: ${page}`);
+          logToStderr(`Converted string page to number: ${page}`);
         } else if (typeof params.page === 'number') {
           page = params.page;
         }
@@ -123,14 +123,14 @@ export async function listPages(
         // Ensure page is within reasonable bounds
         if (isNaN(page) || page < 1) {
           page = 1;
-          logToStderr(`⚠️ Invalid page value, reset to default: ${page}`);
+          logToStderr(`Invalid page value, reset to default: ${page}`);
         }
       }
     } else {
-      logToStderr('⚠️ No parameters provided, using defaults');
+      logToStderr('No parameters provided, using defaults');
     }
 
-    logToStderr(`🔍 Calling GROWI API with: path="${path}", limit=${limit}, page=${page}`);
+    logToStderr(`Calling GROWI API with: path="${path}", limit=${limit}, page=${page}`);
     
     // ここで直接curlと同様のHTTPリクエストを実行
     try {
@@ -188,7 +188,7 @@ export async function listPages(
         };
       }
     } catch (directError) {
-      logToStderr(`❌ Direct request failed: ${directError instanceof Error ? directError.message : String(directError)}`);
+      logToStderr(`Direct request failed: ${directError instanceof Error ? directError.message : String(directError)}`);
       // エラーの場合はここでcatchして、次の処理に進む
     }
     
@@ -196,7 +196,7 @@ export async function listPages(
     const response = await client.listPages(path, limit, page);
 
     // Log more detailed response info for debugging
-    logToStderr(`📋 GROWI API response details:`, {
+    logToStderr(`GROWI API response details:`, {
       ok: response.ok,
       pagesCount: response.pages?.length || 0,
       hasError: response.error ? true : false,
@@ -205,7 +205,7 @@ export async function listPages(
     });
 
     if (!response.ok) {
-      console.error(`❌ GROWI API returned error: ${response.error || 'Unknown error'}`);
+      console.error(`GROWI API returned error: ${response.error || 'Unknown error'}`);
       return {
         content: [
           {
@@ -216,12 +216,12 @@ export async function listPages(
       };
     }
 
-    logToStderr(`✅ GROWI API returned ${response.pages?.length || 0} pages`);
+    logToStderr(`GROWI API returned ${response.pages?.length || 0} pages`);
     let resultText = '';
     
     if (!response.pages || response.pages.length === 0) {
       resultText = `No pages found under path: ${path}`;
-      logToStderr('ℹ️ No pages returned from GROWI API');
+      logToStderr('No pages returned from GROWI API');
     } else {
       resultText = `Found ${response.pages.length} pages under path: ${path}\n\n`;
       response.pages.forEach((page: GrowiPage, index: number) => {
@@ -236,7 +236,7 @@ export async function listPages(
         const startIndex = (page - 1) * limit + 1;
         const endIndex = Math.min(startIndex + response.pages.length - 1, response.meta.total);
         resultText += `\nShowing ${startIndex}-${endIndex} of ${response.meta.total} total pages`;
-        logToStderr(`ℹ️ Pagination info: showing ${startIndex}-${endIndex} of ${response.meta.total} total pages`);
+        logToStderr(`Pagination info: showing ${startIndex}-${endIndex} of ${response.meta.total} total pages`);
       }
     }
 
@@ -249,7 +249,7 @@ export async function listPages(
       ],
     };
   } catch (error) {
-    console.error('❌ Exception in listPages tool:', error);
+    console.error('Exception in listPages tool:', error);
     return {
       content: [
         {
