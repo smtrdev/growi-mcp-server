@@ -3,7 +3,6 @@ import https from 'https';
 import http from 'http';
 import { URL } from 'url';
 import { GrowiClient } from '../growi-client.js';
-import { GrowiPage } from '../types/growi.js';
 
 // Ensure logging goes to stderr
 const logToStderr = (...args: any[]) => {
