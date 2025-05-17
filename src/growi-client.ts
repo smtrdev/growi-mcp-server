@@ -1,11 +1,10 @@
-import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
 import { 
-  GrowiPageResponse,
   GrowiPagesResponse,
-  GrowiPageUpdateResponse,
-  GrowiSearchResponse,
-  GrowiErrorResponse 
 } from './types/growi.js';
+import https from 'https';
+import http from 'http';
+import { URL } from 'url';
 
 // Ensure console methods are redirected to stderr
 const logToStderr = (...args: any[]) => {
@@ -14,39 +13,29 @@ const logToStderr = (...args: any[]) => {
 
 export class GrowiClient {
   private client: AxiosInstance;
+  readonly apiToken: string;
+  readonly baseURL: string;
   
   constructor(apiUrl: string, apiToken: string) {
     if (!apiUrl) throw new Error('GROWI API URL is required');
     if (!apiToken) throw new Error('GROWI API token is required');
     
     logToStderr(`Initializing GROWI client with URL: ${apiUrl}`);
-    // Debug token (mask most of it for security)
-    const maskedToken = apiToken.substring(0, 5) + '...' + apiToken.substring(apiToken.length - 5);
-    logToStderr(`Using API token: ${maskedToken}`);
     
+    this.apiToken = apiToken;
+    this.baseURL = apiUrl;
+    
+    // シンプルなHTTPクライアントとして初期化
     this.client = axios.create({
       baseURL: apiUrl,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiToken}`,
       },
     });
 
-    // Add request interceptor for logging
-    this.client.interceptors.request.use((config) => {
-      logToStderr(`🔄 Sending ${config.method?.toUpperCase()} request to: ${config.baseURL}${config.url}`);
-      logToStderr(`🔄 Request params:`, config.params);
-      logToStderr(`🔄 Request headers:`, this.sanitizeHeaders(config.headers));
-      return config;
-    });
-
-    // Add response interceptor for logging
+    // レスポンスのエラーログ用インターセプタ追加
     this.client.interceptors.response.use(
-      (response) => {
-        logToStderr(`✅ Response status: ${response.status}`);
-        logToStderr(`✅ Response data structure: ${this.getObjectStructure(response.data)}`);
-        return response;
-      },
+      (response) => response,
       (error) => {
         this.logAxiosError(error);
         throw error;
@@ -54,81 +43,157 @@ export class GrowiClient {
     );
   }
 
-  // Helper method to sanitize headers (hide sensitive info)
-  private sanitizeHeaders(headers: any): any {
-    const sanitized = { ...headers };
-    if (sanitized.Authorization) {
-      sanitized.Authorization = sanitized.Authorization.substring(0, 15) + '...';
-    }
-    return sanitized;
-  }
-
-  // Helper method to get the structure of an object without the actual data
-  private getObjectStructure(obj: any): string {
-    if (!obj) return 'null or undefined';
-    if (typeof obj !== 'object') return typeof obj;
-    
-    if (Array.isArray(obj)) {
-      if (obj.length === 0) return 'empty array';
-      return `array with ${obj.length} items, first item is ${this.getObjectStructure(obj[0])}`;
-    }
-    
-    const keys = Object.keys(obj);
-    if (keys.length === 0) return 'empty object';
-    return `object with keys: ${keys.join(', ')}`;
-  }
-
-  // Helper method to log Axios errors in detail
+  // エラーログ用ヘルパーメソッド
   private logAxiosError(error: AxiosError): void {
-    console.error('❌ Axios Error:', error.message);
-    console.error('🔗 Request Config:', JSON.stringify({
-      url: error.config?.url,
-      method: error.config?.method,
-      baseURL: error.config?.baseURL,
-      params: error.config?.params
-    }, null, 2));
+    console.error('Axios Error:', error.message);
     
     if (error.response) {
-      console.error('📡 Response Status:', error.response.status);
-      console.error('📡 Response Headers:', error.response.headers);
-      console.error('📄 Response Data:', JSON.stringify(error.response.data, null, 2));
+      console.error('Response Status:', error.response.status);
+      if (error.response.data) {
+        console.error('Response Data:', typeof error.response.data === 'object' 
+          ? JSON.stringify(error.response.data) 
+          : String(error.response.data));
+      }
     } else if (error.request) {
-      console.error('❓ No response received from server');
-      console.error('🌐 Request details:', JSON.stringify(error.request, null, 2));
+      console.error('No response received from server');
     }
   }
 
   /**
-   * Get a list of pages
-   * @param path The path to list pages from
-   * @param limit Maximum number of pages to return
-   * @param page Page number (1-based)
+   * クエリパラメータを含むURLを構築するヘルパーメソッド
    */
-  async listPages(path: string = '/', limit: number = 100, page: number = 1): Promise<GrowiPagesResponse> {
-    logToStderr(`🔍 listPages - Starting request with params: path=${path}, limit=${limit}, page=${page}`);
+  private buildUrl(endpoint: string, params: Record<string, any> = {}): string {
+    const url = new URL(this.baseURL + endpoint);
     
-    try {
-      // Test with curl command to ensure API connectivity
-      logToStderr(`💡 Equivalent curl command:\ncurl -s -H "Authorization: Bearer [TOKEN]" "${this.client.defaults.baseURL}/_api/v3/pages/list?path=${encodeURIComponent(path)}&limit=${limit}&page=${page}"`);
+    // URLパラメータを追加
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        url.searchParams.append(key, String(value));
+      }
+    });
+    
+    // アクセストークンを直接追加 - クエリパラメータ方式
+    return url.toString() + `&access_token=${encodeURIComponent(this.apiToken)}`;
+  }
+
+  /**
+   * curlと同様のHTTPリクエストを実行する
+   */
+  private makeNativeCurlRequest<T>(url: string): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const parsedUrl = new URL(url);
       
-      const response = await this.client.get('/_api/v3/pages/list', {
-        params: {
-          path,
-          limit,
-          page,
-        },
+      // curlと同じリクエストオプションを使用
+      const options = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+        path: `${parsedUrl.pathname}${parsedUrl.search}`,
+        method: 'GET',
+        headers: {
+          'User-Agent': 'curl/8.7.1',
+          'Accept': '*/*'
+        }
+      };
+
+      const safeToken = this.apiToken.substring(0, 5) + '...';
+      logToStderr(`Making native curl-like request to URL: ${parsedUrl.protocol}//${parsedUrl.hostname}${options.path.replace(this.apiToken, safeToken)}`);
+      
+      const requestModule = parsedUrl.protocol === 'https:' ? https : http;
+      const req = requestModule.request(options, (res) => {
+        logToStderr(`Response status: ${res.statusCode}`);
+        
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk.toString();
+        });
+        
+        res.on('end', () => {
+          logToStderr(`Response completed. Data length: ${data.length}`);
+          
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              const jsonData = JSON.parse(data);
+              if (jsonData.pages) {
+                logToStderr(`Got ${jsonData.pages.length} pages out of ${jsonData.totalCount} total`);
+              }
+              resolve(jsonData as T);
+            } catch (error) {
+              reject(new Error(`Failed to parse JSON response: ${error instanceof Error ? error.message : String(error)}`));
+            }
+          } else {
+            reject(new Error(`HTTP Error: ${res.statusCode} - ${data}`));
+          }
+        });
       });
       
-      logToStderr(`✅ listPages - Success! Received ${response.data.pages?.length || 0} pages`);
-      if (response.data.pages?.length > 0) {
-        logToStderr(`📃 First page path: ${response.data.pages[0].path}`);
-      }
+      req.on('error', (error) => {
+        logToStderr(`Native HTTP request failed: ${error.message}`);
+        reject(error);
+      });
       
-      // Transform the response to match our expected format
-      // Make sure all fields are JSON-serializable
+      req.end();
+    });
+  }
+
+  /**
+   * APIリクエストを実行するヘルパーメソッド
+   * 常にcurl互換のnativeリクエストを使用
+   */
+  private async request<T>(
+    method: 'get',
+    endpoint: string,
+    params: Record<string, any> = {}
+  ): Promise<T> {
+    try {
+      // Build URL with query parameters and access_token
+      const url = this.buildUrl(endpoint, params);
+      
+      // Use the curl-like native HTTP request 
+      return await this.makeNativeCurlRequest<T>(url);
+    } catch (error: any) {
+      logToStderr(`Request failed for ${endpoint}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * エラーレスポンスの整形
+   */
+  private formatErrorResponse<T>(error: any): T & { ok: false, error: string } {
+    const errorMessage = axios.isAxiosError(error)
+      ? error.response 
+        ? `API Error (${error.response.status}): ${JSON.stringify(error.response.data)}` 
+        : error.request 
+          ? `No response from server: ${error.message}` 
+          : `Request setup error: ${error.message}`
+      : `Error: ${error instanceof Error ? error.message : String(error)}`;
+          
+    return {
+      ok: false,
+      error: errorMessage,
+    } as T & { ok: false, error: string };
+  }
+
+  /**
+   * ページ一覧を取得
+   * @param path 取得対象のパス
+   * @param limit 一度に取得する最大ページ数
+   * @param page ページ番号（1始まり）
+   */
+  async listPages(path: string = '/', limit: number = 100, page: number = 1): Promise<GrowiPagesResponse> {
+    try {
+      const data = await this.request<any>('get', '/_api/v3/pages/list', {
+        path,
+        limit,
+        page,
+      });
+      
+      // レスポンスデータを整形
+      const pagesCount = data.pages?.length || 0;
+      
       return {
         ok: true,
-        pages: Array.isArray(response.data.pages) ? response.data.pages.map((page: any) => ({
+        pages: Array.isArray(data.pages) ? data.pages.map((page: any) => ({
           ...page,
           _id: String(page._id),
           path: String(page.path),
@@ -149,138 +214,13 @@ export class GrowiClient {
           updatedAt: String(page.updatedAt || '')
         })) : [],
         meta: {
-          total: Number(response.data.totalCount || 0),
+          total: Number(data.totalCount || 0),
           limit: Number(limit),
           offset: Number((page - 1) * limit)
         }
       };
-    } catch (error) {
-      console.error(`❌ listPages - Error occurred: ${error instanceof Error ? error.message : String(error)}`);
-      
-      if (axios.isAxiosError(error)) {
-        // Create a valid GrowiPagesResponse with detailed error info
-        const errorMessage = error.response 
-          ? `API Error (${error.response.status}): ${JSON.stringify(error.response.data)}` 
-          : error.request 
-            ? `No response from server: ${error.message}` 
-            : `Request setup error: ${error.message}`;
-            
-        return {
-          ok: false,
-          pages: [],
-          error: errorMessage
-        };
-      }
-      
-      return {
-        ok: false,
-        pages: [],
-        error: `Unknown error: ${error instanceof Error ? error.message : String(error)}`
-      };
-    }
-  }
-
-  /**
-   * Get a specific page by path
-   * @param path The path of the page to get
-   */
-  async getPage(path: string): Promise<GrowiPageResponse> {
-    try {
-      const response = await this.client.get('/api/v3/page', {
-        params: { path },
-      });
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        // Create a valid GrowiPageResponse with error info
-        return {
-          ok: false,
-          page: {} as any,  // Empty page object to satisfy type
-          error: (error.response.data as any)?.error || error.message
-        };
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Create a new page
-   * @param path The path for the new page
-   * @param body The content of the page
-   */
-  async createPage(path: string, body: string): Promise<GrowiPageUpdateResponse> {
-    try {
-      const response = await this.client.post('/api/v3/pages', {
-        path,
-        body,
-      });
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        // Create a valid GrowiPageUpdateResponse with error info
-        return {
-          ok: false,
-          page: {} as any,  // Empty page object to satisfy type
-          revision: {} as any,  // Empty revision object to satisfy type
-          error: (error.response.data as any)?.error || error.message
-        };
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Update an existing page
-   * @param path The path of the page to update
-   * @param body The new content of the page
-   */
-  async updatePage(path: string, body: string): Promise<GrowiPageUpdateResponse> {
-    try {
-      const response = await this.client.put('/api/v3/pages', {
-        path,
-        body,
-      });
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        // Create a valid GrowiPageUpdateResponse with error info
-        return {
-          ok: false,
-          page: {} as any,  // Empty page object to satisfy type
-          revision: {} as any,  // Empty revision object to satisfy type
-          error: (error.response.data as any)?.error || error.message
-        };
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Search for pages
-   * @param query The search query
-   * @param limit Maximum number of results to return
-   * @param offset Number of results to skip
-   */
-  async searchPages(query: string, limit: number = 20, offset: number = 0): Promise<GrowiSearchResponse> {
-    try {
-      const response = await this.client.get('/api/v3/search', {
-        params: {
-          q: query,
-          limit,
-          offset,
-        },
-      });
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        // Create a valid GrowiSearchResponse with error info
-        return {
-          ok: false,
-          data: [],
-          error: (error.response.data as any)?.error || error.message
-        };
-      }
-      throw error;
+    } catch (error: any) {
+      return this.formatErrorResponse<GrowiPagesResponse>(error);
     }
   }
 } 

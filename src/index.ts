@@ -3,17 +3,53 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import https from 'https';
+import http from 'http';
+import { URL } from 'url';
+import fs from 'fs';
+import path from 'path';
 
 import { GrowiClient } from './growi-client.js';
 
 // Import tool schemas and implementations
 import { listPages, listPagesSchema } from './tools/list-pages.js';
 
-// Redirect all console logs to stderr to ensure clean JSON output on stdout
-const originalConsoleLog = console.log;
-const originalConsoleError = console.error;
-console.log = (...args) => originalConsoleError(...args);
-console.error = (...args) => originalConsoleError(...args);
+// ログファイルの設定
+const logDir = path.join(process.cwd(), 'logs');
+let logStream: fs.WriteStream | null = null;
+
+try {
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir);
+  }
+  const logFile = path.join(logDir, `mcp-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
+  logStream = fs.createWriteStream(logFile, { flags: 'a' });
+} catch (error) {
+  // ログ設定に失敗した場合は何もしない
+}
+
+// ログを書き込む関数（ファイルのみ）
+function writeLog(level: string, ...args: any[]) {
+  if (!logStream) return;
+  
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] [${level}] ${args.map(arg => 
+    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+  ).join(' ')}`;
+  
+  logStream.write(logMessage + '\n');
+}
+
+// ログレベル別の関数
+const logger = {
+  info: (...args: any[]) => writeLog('INFO', ...args),
+  error: (...args: any[]) => writeLog('ERROR', ...args),
+  debug: (...args: any[]) => writeLog('DEBUG', ...args),
+  warn: (...args: any[]) => writeLog('WARN', ...args)
+};
+
+// ログファイルの情報を出力
+logger.info(`MCP Server logs will be written to logs directory`);
 
 // Load environment variables
 dotenv.config();
@@ -23,7 +59,7 @@ const apiUrl = process.env.GROWI_API_URL;
 const apiToken = process.env.GROWI_API_TOKEN;
 
 if (!apiUrl || !apiToken) {
-  console.error('Error: GROWI_API_URL and GROWI_API_TOKEN must be set in your environment or .env file');
+  logger.error('Error: GROWI_API_URL and GROWI_API_TOKEN must be set in your environment or .env file');
   process.exit(1);
 }
 
@@ -86,21 +122,133 @@ function zodToJsonSchema(schema: z.ZodType<any, any, any>) {
   return outputSchema;
 }
 
+/**
+ * 直接curlのようなHTTPリクエストを実行する関数
+ * @param path ページのパス
+ * @param limit 一度に取得するページ数
+ * @param page ページ番号
+ */
+async function directGrowiRequest(path: string = '/', limit: number = 5, page: number = 1) {
+  return new Promise<any>((resolve, reject) => {
+    // URLの構築
+    if (!apiUrl || !apiToken) {
+      reject(new Error('Missing API URL or token'));
+      return;
+    }
+    
+    const url = new URL(`${apiUrl}/_api/v3/pages/list`);
+    url.searchParams.append('path', path);
+    url.searchParams.append('limit', String(limit));
+    url.searchParams.append('page', String(page));
+    
+    // 重要: クエリパラメータとしてトークンを直接追加
+    // URLSearchParamsを使わず、直接文字列に追加する
+    const urlString = url.toString() + `&access_token=${encodeURIComponent(apiToken)}`;
+    
+    const parsedUrl = new URL(urlString);
+    
+    // curlと同じリクエストオプション
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      path: `${parsedUrl.pathname}${parsedUrl.search}`,
+      method: 'GET',
+      headers: {
+        'User-Agent': 'curl/8.7.1',
+        'Accept': '*/*'
+      }
+    };
+    
+    // トークンを隠した形でログ出力
+    const safeToken = apiToken.substring(0, 5) + '...';
+    logger.info(`Direct curl request: ${parsedUrl.protocol}//${parsedUrl.hostname}${options.path.replace(apiToken, safeToken)}`);
+    
+    // HTTPリクエスト実行
+    const protocol = parsedUrl.protocol === 'https:' ? https : http;
+    const req = protocol.request(options, (res) => {
+      logger.info(`Response status: ${res.statusCode}`);
+      
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk.toString();
+      });
+      
+      res.on('end', () => {
+        logger.info(`Response completed. Data length: ${data.length}`);
+        
+        if (res.statusCode === 200) {
+          try {
+            const jsonData = JSON.parse(data);
+            logger.info(`Got ${jsonData.pages?.length || 0} pages out of ${jsonData.totalCount} total`);
+            
+            // 結果をMCPツール用に整形
+            const pagesCount = jsonData.pages?.length || 0;
+            const totalCount = jsonData.totalCount || 0;
+            const startIndex = (page - 1) * limit + 1;
+            const endIndex = Math.min(startIndex + pagesCount - 1, totalCount);
+            
+            let resultText = '';
+            if (pagesCount === 0) {
+              resultText = `No pages found under path: ${path}`;
+            } else {
+              resultText = `Found ${pagesCount} pages under path: ${path}\n\n`;
+              jsonData.pages.forEach((page: any, index: number) => {
+                resultText += `- ${page.path}\n`;
+              });
+              
+              resultText += `\nShowing ${startIndex}-${endIndex} of ${totalCount} total pages`;
+            }
+            
+            resolve({
+              content: [
+                {
+                  type: 'text',
+                  text: resultText,
+                },
+              ],
+            });
+          } catch (error) {
+            logger.error('Failed to parse JSON response:', error instanceof Error ? error.message : String(error));
+            reject(error);
+          }
+        } else {
+          logger.error(`HTTP Error: ${res.statusCode} - ${data}`);
+          resolve({
+            content: [
+              {
+                type: 'text',
+                text: `Error listing pages (path: ${path}, offset: ${(page-1) * limit}): HTTP Error (${res.statusCode}) - ${data}`,
+              },
+            ],
+          });
+        }
+      });
+    });
+    
+    req.on('error', (error) => {
+      logger.error(`Request error: ${error.message}`);
+      reject(error);
+    });
+    
+    req.end();
+  });
+}
+
 // Register tools - this is for the MCP 'tools/list' method
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   try {
-    console.log('📋 Handling tools/list request');
+    logger.info('Handling tools/list request');
     return {
       tools: [
         {
-          name: 'growi_list_pages',
+          name: 'mcp_growi_growi_list_pages',
           description: 'List GROWI pages under a specific path',
           inputSchema: zodToJsonSchema(listPagesSchema),
         },
       ],
     };
   } catch (error) {
-    console.error('❌ Error handling tools/list request:', error);
+    logger.error('Error handling tools/list request:', error);
     throw error;
   }
 });
@@ -109,15 +257,53 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
   try {
     const { name, arguments: args } = request.params;
-    console.log(`📋 Handling tools/call request for tool: ${name}`);
-    console.log(`📋 Tool arguments:`, JSON.stringify(args, null, 2));
+    logger.info(`Handling tools/call request for tool: ${name}`);
+    logger.info(`Tool arguments:`, JSON.stringify(args, null, 2));
+    logger.info(`Request details:`, JSON.stringify({
+      id: request.id,
+      jsonrpc: request.jsonrpc,
+      method: request.method,
+      params: {
+        name: request.params.name,
+        arguments: request.params.arguments
+      }
+    }, null, 2));
 
+    let result;
     switch (name) {
-      case 'growi_list_pages':
-        return await listPages(growiClient, args as any);
+      case 'mcp_growi_growi_list_pages':
+        // 直接HTTP実装を使用
+        try {
+          logger.info(`Executing tool '${name}' with args:`, JSON.stringify(args, null, 2));
+          const path = args.path || '/';
+          const limit = parseInt(args.limit || '5', 10);
+          const page = parseInt(args.page || '1', 10);
+          
+          logger.info(`Preparing to call GROWI API with: path=${path}, limit=${limit}, page=${page}`);
+          // curlのような直接HTTPリクエストで結果を返す
+          result = await directGrowiRequest(path, limit, page);
+          logger.info(`Tool execution completed successfully for '${name}'`);
+          logger.info(`Response summary:`, JSON.stringify({
+            contentLength: result.content?.[0]?.text?.length || 0,
+            hasContent: !!result.content?.length
+          }, null, 2));
+          return result;
+        } catch (directError) {
+          logger.error(`Direct HTTP request failed: ${directError instanceof Error ? directError.message : String(directError)}`);
+          logger.error(`Falling back to GrowiClient implementation`);
+          
+          // エラーが発生した場合は元の実装にフォールバック
+          result = await listPages(growiClient, args as any);
+          logger.info(`Fallback execution completed for '${name}'`);
+          logger.info(`Fallback response summary:`, JSON.stringify({
+            contentLength: result.content?.[0]?.text?.length || 0,
+            hasContent: !!result.content?.length
+          }, null, 2));
+          return result;
+        }
 
       default:
-        console.error(`❌ Unknown tool requested: ${name}`);
+        logger.error(`Unknown tool requested: ${name}`);
         return {
           isError: true,
           content: [
@@ -129,7 +315,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
         };
     }
   } catch (error) {
-    console.error('❌ Error handling tools/call request:', error);
+    logger.error('Error handling tools/call request:', error);
+    logger.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
     return {
       isError: true,
       content: [
@@ -146,11 +333,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 async function main() {
   try {
     const transport = new StdioServerTransport();
-    console.error('Connecting to transport...');
+    logger.info('Connecting to transport...');
     await server.connect(transport);
-    console.error('GROWI MCP server is running');
+    logger.info('GROWI MCP server is running');
   } catch (error) {
-    console.error('Failed to start server:', error);
+    logger.error('Failed to start server:', error);
     process.exit(1);
   }
 }
