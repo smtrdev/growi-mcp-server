@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { GrowiClient } from '../growi-client.js';
-import { GrowiPage } from '../types/growi.js';
 import https from 'https';
 import http from 'http';
 import { URL } from 'url';
+import { GrowiClient } from '../growi-client.js';
+import { GrowiPage } from '../types/growi.js';
 
 // Ensure logging goes to stderr
 const logToStderr = (...args: any[]) => {
@@ -17,6 +17,79 @@ export const listPagesSchema = z.object({
 });
 
 export type ListPagesParams = z.infer<typeof listPagesSchema>;
+
+interface NormalizedParams {
+  path: string;
+  limit: number;
+  page: number;
+}
+
+function normalizeParams(params?: ListPagesParams): NormalizedParams {
+  if (!params) {
+    logToStderr('No parameters provided, using defaults');
+    return { path: '/', limit: 100, page: 1 };
+  }
+
+  const parsed = listPagesSchema.parse(params);
+
+  let path = parsed.path !== undefined ? String(parsed.path) : '/';
+  if (!path.startsWith('/')) path = '/' + path;
+
+  let limit = parsed.limit !== undefined ? Number(parsed.limit) : 100;
+  if (typeof parsed.limit === 'string') {
+    logToStderr(`Converted string limit to number: ${limit}`);
+  }
+  if (isNaN(limit) || limit < 1) {
+    limit = 100;
+    logToStderr(`Invalid limit value, reset to default: ${limit}`);
+  } else if (limit > 1000) {
+    limit = 1000;
+    logToStderr(`Limit too large, capped at: ${limit}`);
+  }
+
+  let page = parsed.page !== undefined ? Number(parsed.page) : 1;
+  if (typeof parsed.page === 'string') {
+    logToStderr(`Converted string page to number: ${page}`);
+  }
+  if (isNaN(page) || page < 1) {
+    page = 1;
+    logToStderr(`Invalid page value, reset to default: ${page}`);
+  }
+
+  return { path, limit, page };
+}
+
+function formatResultText(
+  path: string,
+  pages: { path: string }[] | undefined,
+  total: number | undefined,
+  limit: number,
+  page: number,
+): string {
+  if (!pages || pages.length === 0) {
+    logToStderr('No pages returned from API');
+    return `No pages found under path: ${path}`;
+  }
+
+  const startIndex = (page - 1) * limit + 1;
+  const endIndex = Math.min(startIndex + pages.length - 1, total ?? pages.length);
+
+  let text = `Found ${pages.length} pages under path: ${path}\n\n`;
+  pages.forEach((p, index) => {
+    if (index < 10) logToStderr(`  - Page ${index + 1}: ${p.path}`);
+    text += `- ${p.path}\n`;
+  });
+  if (pages.length > 10) {
+    logToStderr(`  - ... and ${pages.length - 10} more pages`);
+  }
+
+  if (total !== undefined) {
+    text += `\nShowing ${startIndex}-${endIndex} of ${total} total pages`;
+    logToStderr(`Pagination info: showing ${startIndex}-${endIndex} of ${total} total pages`);
+  }
+
+  return text;
+}
 
 /**
  * 直接HTTPリクエストを実行する関数
@@ -87,58 +160,7 @@ export async function listPages(
   params: ListPagesParams
 ): Promise<{ content: { type: string; text: string }[] }> {
   try {
-    // Parameter validation and type conversion
-    let path = '/';
-    let limit = 100;
-    let page = 1;
-
-    if (params) {
-      // Handle path parameter
-      if (params.path !== undefined) {
-        path = String(params.path); // Ensure string type
-        if (!path.startsWith('/')) {
-          path = '/' + path; // Ensure path starts with /
-        }
-      }
-
-      // Handle limit parameter
-      if (params.limit !== undefined) {
-        if (typeof params.limit === 'string') {
-          limit = parseInt(params.limit, 10);
-          logToStderr(`Converted string limit to number: ${limit}`);
-        } else if (typeof params.limit === 'number') {
-          limit = params.limit;
-        }
-        
-        // Ensure limit is within reasonable bounds
-        if (isNaN(limit) || limit < 1) {
-          limit = 100;
-          logToStderr(`Invalid limit value, reset to default: ${limit}`);
-        } else if (limit > 1000) {
-          limit = 1000;
-          logToStderr(`Limit too large, capped at: ${limit}`);
-        }
-      }
-
-      // Handle page parameter
-      if (params.page !== undefined) {
-        if (typeof params.page === 'string') {
-          page = parseInt(params.page, 10);
-          logToStderr(`Converted string page to number: ${page}`);
-        } else if (typeof params.page === 'number') {
-          page = params.page;
-        }
-        
-        // Ensure page is within reasonable bounds
-        if (isNaN(page) || page < 1) {
-          page = 1;
-          logToStderr(`Invalid page value, reset to default: ${page}`);
-        }
-      }
-    } else {
-      logToStderr('No parameters provided, using defaults');
-    }
-
+    const { path, limit, page } = normalizeParams(params);
     logToStderr(`Calling GROWI API with: path="${path}", limit=${limit}, page=${page}`);
     
     // ここで直接curlと同様のHTTPリクエストを実行
@@ -161,30 +183,9 @@ export async function listPages(
       
       // 直接HTTPリクエストを行う
       const data = await makeNativeHttpRequest(urlString, apiToken);
-      
-      // 成功した場合は直接結果を返す
+
       if (data && data.pages) {
-        // 結果の整形
-        const pagesCount = data.pages.length || 0;
-        const startIndex = (page - 1) * limit + 1;
-        const endIndex = Math.min(startIndex + pagesCount - 1, data.totalCount || 0);
-        
-        let resultText = '';
-        if (pagesCount === 0) {
-          resultText = `No pages found under path: ${path}`;
-        } else {
-          resultText = `Found ${pagesCount} pages under path: ${path}\n\n`;
-          data.pages.forEach((page: any, index: number) => {
-            if (index < 10) logToStderr(`  - Page ${index+1}: ${page.path}`);
-            resultText += `- ${page.path}\n`;
-          });
-          if (pagesCount > 10) {
-            logToStderr(`  - ... and ${pagesCount - 10} more pages`);
-          }
-          
-          resultText += `\nShowing ${startIndex}-${endIndex} of ${data.totalCount} total pages`;
-        }
-        
+        const resultText = formatResultText(path, data.pages, data.totalCount, limit, page);
         return {
           content: [
             {
@@ -224,28 +225,14 @@ export async function listPages(
     }
 
     logToStderr(`GROWI API returned ${response.pages?.length || 0} pages`);
-    let resultText = '';
-    
-    if (!response.pages || response.pages.length === 0) {
-      resultText = `No pages found under path: ${path}`;
-      logToStderr('No pages returned from GROWI API');
-    } else {
-      resultText = `Found ${response.pages.length} pages under path: ${path}\n\n`;
-      response.pages.forEach((page: GrowiPage, index: number) => {
-        if (index < 10) logToStderr(`  - Page ${index+1}: ${page.path}`);
-        resultText += `- ${page.path}\n`;
-      });
-      if (response.pages.length > 10) {
-        logToStderr(`  - ... and ${response.pages.length - 10} more pages`);
-      }
 
-      if (response.meta) {
-        const startIndex = (page - 1) * limit + 1;
-        const endIndex = Math.min(startIndex + response.pages.length - 1, response.meta.total);
-        resultText += `\nShowing ${startIndex}-${endIndex} of ${response.meta.total} total pages`;
-        logToStderr(`Pagination info: showing ${startIndex}-${endIndex} of ${response.meta.total} total pages`);
-      }
-    }
+    const resultText = formatResultText(
+      path,
+      response.pages,
+      response.meta?.total,
+      limit,
+      page,
+    );
 
     return {
       content: [
