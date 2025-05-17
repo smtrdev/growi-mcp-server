@@ -14,4 +14,12 @@ jobs:
         with:
           node-version: 18
       - run: npm ci
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            ts:
+              - '**/*.ts'
+      - run: npm run build
+        if: steps.filter.outputs.ts == 'true'
       - run: npm test
