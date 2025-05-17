@@ -56,11 +56,11 @@ Once configured, you can use the following commands in Claude Desktop:
 
 ### List Pages
 
-```
-growi_list_pages can you list all pages under the /projects path?
+```text
+mcp_growi_growi_list_pages can you list all pages under the /projects path?
 ```
 
-```
+```text
 /user のパスから10件取ってきて
 ```
 
