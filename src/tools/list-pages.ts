@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { GrowiClient } from '../growi-client.js';
 import { GrowiPage } from '../types/growi.js';
+import https from 'https';
+import http from 'http';
+import { URL } from 'url';
 
 // Ensure logging goes to stderr
 const logToStderr = (...args: any[]) => {
@@ -15,13 +18,66 @@ export const listPagesSchema = z.object({
 
 export type ListPagesParams = z.infer<typeof listPagesSchema>;
 
+/**
+ * 直接HTTPリクエストを実行する関数
+ * curlコマンドと同様の挙動を実現する
+ */
+function makeNativeHttpRequest(url: string, apiToken: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    logToStderr(`🌐 Making native HTTP request to: ${url.replace(apiToken, apiToken.substring(0, 5) + '...')}`);
+    
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      path: `${parsedUrl.pathname}${parsedUrl.search}`,
+      method: 'GET',
+      headers: {
+        'User-Agent': 'curl/8.7.1', 
+        'Accept': '*/*',
+      }
+    };
+    
+    const protocol = parsedUrl.protocol === 'https:' ? https : http;
+    const req = protocol.request(options, (res) => {
+      logToStderr(`🔄 Response status: ${res.statusCode}`);
+      
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk.toString();
+      });
+      
+      res.on('end', () => {
+        logToStderr(`✅ Response completed. Data length: ${data.length}`);
+        
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            const jsonData = JSON.parse(data);
+            logToStderr(`📊 Got ${jsonData.pages?.length || 0} pages out of ${jsonData.totalCount || 0} total`);
+            resolve(jsonData);
+          } catch (error) {
+            reject(new Error(`Failed to parse JSON: ${error instanceof Error ? error.message : String(error)}`));
+          }
+        } else {
+          reject(new Error(`HTTP Error: ${res.statusCode} ${res.statusMessage || ''} - ${data}`));
+        }
+      });
+    });
+    
+    req.on('error', (error) => {
+      logToStderr(`❌ Request failed: ${error.message}`);
+      reject(error);
+    });
+    
+    req.end();
+  });
+}
+
 export async function listPages(
   client: GrowiClient,
   params: ListPagesParams
 ): Promise<{ content: { type: string; text: string }[] }> {
   try {
-    logToStderr('📥 listPages tool called with params:', JSON.stringify(params, null, 2));
-    
     // Parameter validation and type conversion
     let path = '/';
     let limit = 100;
@@ -34,7 +90,6 @@ export async function listPages(
         if (!path.startsWith('/')) {
           path = '/' + path; // Ensure path starts with /
         }
-        logToStderr(`📝 Normalized path parameter: "${path}"`);
       }
 
       // Handle limit parameter
@@ -76,6 +131,68 @@ export async function listPages(
     }
 
     logToStderr(`🔍 Calling GROWI API with: path="${path}", limit=${limit}, page=${page}`);
+    
+    // ここで直接curlと同様のHTTPリクエストを実行
+    try {
+      const apiUrl = (client as any).baseURL;
+      const apiToken = (client as any).apiToken;
+      
+      if (!apiUrl || !apiToken) {
+        throw new Error('Missing API URL or token');
+      }
+
+      // curlで成功するのと同じURLを構築 - URL は自動的にエンコードを行うため注意
+      const url = new URL(`${apiUrl}/_api/v3/pages/list`);
+      url.searchParams.append('path', path);
+      url.searchParams.append('limit', String(limit));
+      url.searchParams.append('page', String(page));
+      
+      // 重要: クエリパラメータとしてトークンを追加
+      // FIXME: Authorization headerを使用する
+      // 直接トークンを文字列に追加し、URLエンコードの問題を回避する
+      const urlString = url.toString() + `&access_token=${encodeURIComponent(apiToken)}`;
+      
+      // 直接HTTPリクエストを行う
+      const data = await makeNativeHttpRequest(urlString, apiToken);
+      
+      // 成功した場合は直接結果を返す
+      if (data && data.pages) {
+        // 結果の整形
+        const pagesCount = data.pages.length || 0;
+        const startIndex = (page - 1) * limit + 1;
+        const endIndex = Math.min(startIndex + pagesCount - 1, data.totalCount || 0);
+        
+        let resultText = '';
+        if (pagesCount === 0) {
+          resultText = `No pages found under path: ${path}`;
+        } else {
+          resultText = `Found ${pagesCount} pages under path: ${path}\n\n`;
+          data.pages.forEach((page: any, index: number) => {
+            if (index < 10) logToStderr(`  - Page ${index+1}: ${page.path}`);
+            resultText += `- ${page.path}\n`;
+          });
+          if (pagesCount > 10) {
+            logToStderr(`  - ... and ${pagesCount - 10} more pages`);
+          }
+          
+          resultText += `\nShowing ${startIndex}-${endIndex} of ${data.totalCount} total pages`;
+        }
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: resultText,
+            },
+          ],
+        };
+      }
+    } catch (directError) {
+      logToStderr(`❌ Direct request failed: ${directError instanceof Error ? directError.message : String(directError)}`);
+      // エラーの場合はここでcatchして、次の処理に進む
+    }
+    
+    // GrowiClientを使用したフォールバック処理
     const response = await client.listPages(path, limit, page);
 
     // Log more detailed response info for debugging
