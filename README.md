@@ -5,6 +5,7 @@ This Model Context Protocol (MCP) server provides growi integration.
 ## Features
 
 - **List Pages**: List pages under a specific path
+- **Recently Updated Pages**: Get a list of pages recently edited on GROWI
 - And coming soon...
 
 ## Prerequisites
@@ -62,6 +63,16 @@ mcp_growi_growi_list_pages can you list all pages under the /projects path?
 
 ```text
 /user のパスから10件取ってきて
+```
+
+### Recently Updated Pages
+
+```text
+mcp_growi_growi_recently_updated_pages show me the latest edited pages
+```
+
+```text
+mcp_growi_growi_recently_updated_pages limit=5 offset=0
 ```
 
 And coming soon...

@@ -13,6 +13,7 @@ import { GrowiClient } from './growi-client.js';
 
 // Import tool schemas and implementations
 import { listPages, listPagesSchema } from './tools/list-pages.js';
+import { recentlyUpdatedPages, recentlyUpdatedPagesSchema } from './tools/recently-updated-pages.js';
 
 // ログファイルの設定
 const logDir = path.join(process.cwd(), 'logs');
@@ -250,6 +251,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           description: 'List GROWI pages under a specific path',
           inputSchema: zodToJsonSchema(listPagesSchema),
         },
+        {
+          name: 'mcp_growi_growi_recently_updated_pages',
+          description: 'Get recently updated GROWI pages',
+          inputSchema: zodToJsonSchema(recentlyUpdatedPagesSchema),
+        },
       ],
     };
   } catch (error) {
@@ -305,6 +311,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
             hasContent: !!result.content?.length
           }, null, 2));
           return result;
+        }
+
+      case 'mcp_growi_growi_recently_updated_pages':
+        try {
+          logger.info(`Executing tool '${name}' with args:`, JSON.stringify(args, null, 2));
+          const limit = parseInt(args.limit || '20', 10);
+          const offset = parseInt(args.offset || '0', 10);
+
+          logger.info(`Preparing to call GROWI API with: limit=${limit}, offset=${offset}`);
+          result = await recentlyUpdatedPages(growiClient, { limit, offset });
+          logger.info(`Tool execution completed successfully for '${name}'`);
+          logger.info(`Response summary:`, JSON.stringify({
+            contentLength: result.content?.[0]?.text?.length || 0,
+            hasContent: !!result.content?.length
+          }, null, 2));
+          return result;
+        } catch (error) {
+          logger.error(`Error executing '${name}': ${error instanceof Error ? error.message : String(error)}`);
+          return {
+            isError: true,
+            content: [
+              { type: 'text', text: `Error executing tool: ${error instanceof Error ? error.message : String(error)}` }
+            ]
+          };
         }
 
       default:
