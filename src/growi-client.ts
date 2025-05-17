@@ -79,7 +79,7 @@ export class GrowiClient {
   /**
    * curlと同様のHTTPリクエストを実行する
    */
-  private makeNativeCurlRequest<T>(url: string): Promise<T> {
+  private makeNativeCurlRequest<T>(url: string, method: string = 'GET'): Promise<T> {
     return new Promise((resolve, reject) => {
       const parsedUrl = new URL(url);
       
@@ -91,7 +91,7 @@ export class GrowiClient {
         hostname: parsedUrl.hostname,
         port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
         path: `${parsedUrl.pathname}${parsedUrl.search}`,
-        method: 'GET',
+        method: method.toUpperCase(),
         headers: {
           'User-Agent': 'curl/8.7.1',
           'Accept': '*/*',
@@ -148,7 +148,7 @@ export class GrowiClient {
    * 常にcurl互換のnativeリクエストを使用
    */
   private async request<T>(
-    method: 'get',
+    method: string,
     endpoint: string,
     params: Record<string, any> = {}
   ): Promise<T> {
@@ -157,7 +157,7 @@ export class GrowiClient {
       const url = this.buildUrl(endpoint, params);
       
       // Use the curl-like native HTTP request 
-      return await this.makeNativeCurlRequest<T>(url);
+      return await this.makeNativeCurlRequest<T>(url, method);
     } catch (error: any) {
       logToStderr(`Request failed for ${endpoint}: ${error.message}`);
       throw error;
