@@ -276,4 +276,40 @@ export class GrowiClient {
       return this.formatErrorResponse<GrowiPagesResponse>(error);
     }
   }
+
+  /**
+   * Get a single page by path
+   * @param path Page path
+   */
+  async getPage(path: string): Promise<GrowiPageResponse> {
+    try {
+      const data = await this.request<any>('get', '/_api/v3/page', { path });
+
+      return {
+        ok: true,
+        page: {
+          ...data.page,
+          _id: String(data.page?._id || ''),
+          path: String(data.page?.path || ''),
+          creator: {
+            _id: String(data.page?.creator?._id || ''),
+            name: String(data.page?.creator?.name || '')
+          },
+          revision: {
+            _id: String(data.page?.revision?._id || ''),
+            body: String(data.page?.revision?.body || ''),
+            author: {
+              _id: String(data.page?.revision?.author?._id || ''),
+              name: String(data.page?.revision?.author?.name || '')
+            },
+            createdAt: String(data.page?.revision?.createdAt || '')
+          },
+          createdAt: String(data.page?.createdAt || ''),
+          updatedAt: String(data.page?.updatedAt || '')
+        }
+      };
+    } catch (error: any) {
+      return this.formatErrorResponse<GrowiPageResponse>(error);
+    }
+  }
 }

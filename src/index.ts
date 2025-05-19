@@ -14,6 +14,7 @@ import { GrowiClient } from './growi-client.js';
 // Import tool schemas and implementations
 import { listPages, listPagesSchema } from './tools/list-pages.js';
 import { recentlyUpdatedPages, recentlyUpdatedPagesSchema } from './tools/recently-updated-pages.js';
+import { getPage, getPageSchema } from './tools/get-page.js';
 
 // ログファイルの設定
 const logDir = path.join(process.cwd(), 'logs');
@@ -256,6 +257,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           description: 'Get recently updated GROWI pages',
           inputSchema: zodToJsonSchema(recentlyUpdatedPagesSchema),
         },
+        {
+          name: 'mcp_growi_growi_get_page',
+          description: 'Get the contents of a single GROWI page',
+          inputSchema: zodToJsonSchema(getPageSchema),
+        },
       ],
     };
   } catch (error) {
@@ -321,6 +327,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 
           logger.info(`Preparing to call GROWI API with: limit=${limit}, offset=${offset}`);
           result = await recentlyUpdatedPages(growiClient, { limit, offset });
+          logger.info(`Tool execution completed successfully for '${name}'`);
+          logger.info(`Response summary:`, JSON.stringify({
+            contentLength: result.content?.[0]?.text?.length || 0,
+            hasContent: !!result.content?.length
+          }, null, 2));
+          return result;
+        } catch (error) {
+          logger.error(`Error executing '${name}': ${error instanceof Error ? error.message : String(error)}`);
+          return {
+            isError: true,
+            content: [
+              { type: 'text', text: `Error executing tool: ${error instanceof Error ? error.message : String(error)}` }
+            ]
+          };
+        }
+
+      case 'mcp_growi_growi_get_page':
+        try {
+          logger.info(`Executing tool '${name}' with args:`, JSON.stringify(args, null, 2));
+          const path = typeof args.path === 'string' ? args.path : String(args.path || '');
+
+          logger.info(`Preparing to call GROWI API with: path=${path}`);
+          result = await getPage(growiClient, { path });
           logger.info(`Tool execution completed successfully for '${name}'`);
           logger.info(`Response summary:`, JSON.stringify({
             contentLength: result.content?.[0]?.text?.length || 0,
