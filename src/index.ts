@@ -15,8 +15,6 @@ import { GrowiClient } from './growi-client.js';
 import { listPages, listPagesSchema } from './tools/list-pages.js';
 import { recentlyUpdatedPages, recentlyUpdatedPagesSchema } from './tools/recently-updated-pages.js';
 import { getPage, getPageSchema } from './tools/get-page.js';
-import { searchPages, searchPagesSchema } from './tools/search-pages.js';
-import { pageExists, pageExistsSchema } from './tools/page-exists.js';
 
 // ログファイルの設定
 const logDir = path.join(process.cwd(), 'logs');
