@@ -59,6 +59,11 @@ export interface GrowiSearchResponse extends BaseResponse {
   data: GrowiPage[];
 }
 
+// Response for checking page existence
+export interface GrowiPageExistResponse extends BaseResponse {
+  exists: boolean;
+}
+
 // Error response
 export interface GrowiErrorResponse {
   ok: false;

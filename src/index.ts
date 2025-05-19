@@ -14,6 +14,9 @@ import { GrowiClient } from './growi-client.js';
 // Import tool schemas and implementations
 import { listPages, listPagesSchema } from './tools/list-pages.js';
 import { recentlyUpdatedPages, recentlyUpdatedPagesSchema } from './tools/recently-updated-pages.js';
+import { getPage, getPageSchema } from './tools/get-page.js';
+import { searchPages, searchPagesSchema } from './tools/search-pages.js';
+import { pageExists, pageExistsSchema } from './tools/page-exists.js';
 
 // ログファイルの設定
 const logDir = path.join(process.cwd(), 'logs');
@@ -256,6 +259,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           description: 'Get recently updated GROWI pages',
           inputSchema: zodToJsonSchema(recentlyUpdatedPagesSchema),
         },
+        {
+          name: 'mcp_growi_growi_get_page',
+          description: 'Get the contents of a single GROWI page',
+          inputSchema: zodToJsonSchema(getPageSchema),
+        },
+        {
+          name: 'mcp_growi_growi_search_pages',
+          description: 'Search GROWI pages by keyword',
+          inputSchema: zodToJsonSchema(searchPagesSchema),
+        },
+        {
+          name: 'mcp_growi_growi_page_exists',
+          description: 'Check if a GROWI page exists',
+          inputSchema: zodToJsonSchema(pageExistsSchema),
+        },
       ],
     };
   } catch (error) {
@@ -321,6 +339,77 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 
           logger.info(`Preparing to call GROWI API with: limit=${limit}, offset=${offset}`);
           result = await recentlyUpdatedPages(growiClient, { limit, offset });
+          logger.info(`Tool execution completed successfully for '${name}'`);
+          logger.info(`Response summary:`, JSON.stringify({
+            contentLength: result.content?.[0]?.text?.length || 0,
+            hasContent: !!result.content?.length
+          }, null, 2));
+          return result;
+        } catch (error) {
+          logger.error(`Error executing '${name}': ${error instanceof Error ? error.message : String(error)}`);
+          return {
+            isError: true,
+            content: [
+              { type: 'text', text: `Error executing tool: ${error instanceof Error ? error.message : String(error)}` }
+            ]
+          };
+        }
+
+      case 'mcp_growi_growi_get_page':
+        try {
+          logger.info(`Executing tool '${name}' with args:`, JSON.stringify(args, null, 2));
+          const path = typeof args.path === 'string' ? args.path : String(args.path || '');
+
+          logger.info(`Preparing to call GROWI API with: path=${path}`);
+          result = await getPage(growiClient, { path });
+          logger.info(`Tool execution completed successfully for '${name}'`);
+          logger.info(`Response summary:`, JSON.stringify({
+            contentLength: result.content?.[0]?.text?.length || 0,
+            hasContent: !!result.content?.length
+          }, null, 2));
+          return result;
+        } catch (error) {
+          logger.error(`Error executing '${name}': ${error instanceof Error ? error.message : String(error)}`);
+          return {
+            isError: true,
+            content: [
+              { type: 'text', text: `Error executing tool: ${error instanceof Error ? error.message : String(error)}` }
+            ]
+          };
+        }
+
+      case 'mcp_growi_growi_search_pages':
+        try {
+          logger.info(`Executing tool '${name}' with args:`, JSON.stringify(args, null, 2));
+          const query = String(args.query || '');
+          const limit = parseInt(args.limit || '20', 10);
+          const offset = parseInt(args.offset || '0', 10);
+
+          logger.info(`Preparing to call GROWI API with: q=${query}, limit=${limit}, offset=${offset}`);
+          result = await searchPages(growiClient, { query, limit, offset });
+          logger.info(`Tool execution completed successfully for '${name}'`);
+          logger.info(`Response summary:`, JSON.stringify({
+            contentLength: result.content?.[0]?.text?.length || 0,
+            hasContent: !!result.content?.length
+          }, null, 2));
+          return result;
+        } catch (error) {
+          logger.error(`Error executing '${name}': ${error instanceof Error ? error.message : String(error)}`);
+          return {
+            isError: true,
+            content: [
+              { type: 'text', text: `Error executing tool: ${error instanceof Error ? error.message : String(error)}` }
+            ]
+          };
+        }
+
+      case 'mcp_growi_growi_page_exists':
+        try {
+          logger.info(`Executing tool '${name}' with args:`, JSON.stringify(args, null, 2));
+          const path = String(args.path || '');
+
+          logger.info(`Preparing to call GROWI API with: path=${path}`);
+          result = await pageExists(growiClient, { path });
           logger.info(`Tool execution completed successfully for '${name}'`);
           logger.info(`Response summary:`, JSON.stringify({
             contentLength: result.content?.[0]?.text?.length || 0,
