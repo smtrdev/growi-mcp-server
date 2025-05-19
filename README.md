@@ -88,18 +88,6 @@ mcp_growi_growi_get_page path=/user/test
 mcp_growi_growi_get_page /user/test を表示して
 ```
 
-### Search Pages
-
-```text
-mcp_growi_growi_search_pages query=meeting limit=5
-```
-
-### Page Exists
-
-```text
-mcp_growi_growi_page_exists path=/projects/plan
-```
-
 And coming soon...
 
 ## Development
