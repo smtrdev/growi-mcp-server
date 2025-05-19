@@ -7,8 +7,6 @@ This Model Context Protocol (MCP) server provides growi integration.
 - **List Pages**: List pages under a specific path
 - **Recently Updated Pages**: Get a list of pages recently edited on GROWI
 - **Get Page**: Retrieve the contents of a single page
-- **Search Pages**: Search pages matching a query
-- **Page Exists**: Check if a page exists
 - And coming soon...
 
 ## Prerequisites
