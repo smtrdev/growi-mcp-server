@@ -276,4 +276,89 @@ export class GrowiClient {
       return this.formatErrorResponse<GrowiPagesResponse>(error);
     }
   }
+
+  /**
+   * Get a single page by path
+   * @param path Page path
+   */
+  async getPage(path: string): Promise<GrowiPageResponse> {
+    try {
+      const data = await this.request<any>('get', '/_api/v3/page', { path });
+
+      return {
+        ok: true,
+        page: {
+          ...data.page,
+          _id: String(data.page?._id || ''),
+          path: String(data.page?.path || ''),
+          creator: {
+            _id: String(data.page?.creator?._id || ''),
+            name: String(data.page?.creator?.name || '')
+          },
+          revision: {
+            _id: String(data.page?.revision?._id || ''),
+            body: String(data.page?.revision?.body || ''),
+            author: {
+              _id: String(data.page?.revision?.author?._id || ''),
+              name: String(data.page?.revision?.author?.name || '')
+            },
+            createdAt: String(data.page?.revision?.createdAt || '')
+          },
+          createdAt: String(data.page?.createdAt || ''),
+          updatedAt: String(data.page?.updatedAt || '')
+        }
+      };
+    } catch (error: any) {
+      return this.formatErrorResponse<GrowiPageResponse>(error);
+    }
+  }
+
+  /**
+   * Search pages
+   * @param query Search keyword
+   * @param limit Number of results to return
+   * @param offset Offset for pagination
+   */
+  async searchPages(query: string, limit: number = 20, offset: number = 0): Promise<GrowiSearchResponse> {
+    try {
+      const data = await this.request<any>('get', '/_api/v3/search', {
+        q: query,
+        limit,
+        offset,
+      });
+
+      return {
+        ok: true,
+        meta: {
+          total: Number(data.meta?.total || 0),
+          took: Number(data.meta?.took || 0),
+          hitsCount: Number(data.meta?.hitsCount || 0),
+        },
+        data: Array.isArray(data.data) ? data.data.map((p: any) => ({
+          ...p,
+          _id: String(p._id),
+          path: String(p.path),
+        })) : [],
+      };
+    } catch (error: any) {
+      return this.formatErrorResponse<GrowiSearchResponse>(error);
+    }
+  }
+
+  /**
+   * Check if a page exists
+   * @param path Page path
+   */
+  async pageExists(path: string): Promise<GrowiPageExistResponse> {
+    try {
+      const data = await this.request<any>('get', '/_api/v3/page/exist', { path });
+
+      return {
+        ok: true,
+        exists: !!data.exist,
+      };
+    } catch (error: any) {
+      return this.formatErrorResponse<GrowiPageExistResponse>(error);
+    }
+  }
 }
