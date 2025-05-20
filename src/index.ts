@@ -3,9 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import dotenv from 'dotenv';
 import { z } from 'zod';
-import https from 'https';
-import http from 'http';
-import { URL } from 'url';
+import { makeNativeHttpRequest } from './tools/native-request.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -131,114 +129,58 @@ function zodToJsonSchema(schema: z.ZodType<any, any, any>) {
  * @param page ページ番号
  */
 async function directGrowiRequest(path: string = '/', limit: number = 5, page: number = 1) {
-  return new Promise<any>((resolve, reject) => {
-    // URLの構築
-    if (!apiUrl || !apiToken) {
-      reject(new Error('Missing API URL or token'));
-      return;
+  if (!apiUrl || !apiToken) {
+    throw new Error('Missing API URL or token');
+  }
+
+  const url = new URL(`${apiUrl}/_api/v3/pages/list`);
+  url.searchParams.append('path', path);
+  url.searchParams.append('limit', String(limit));
+  url.searchParams.append('page', String(page));
+
+  const safeToken = apiToken.substring(0, 5) + '...';
+  logger.info(`Direct curl request: ${url.protocol}//${url.hostname}${url.pathname}${url.search}`);
+  logger.info(`Sending access_token in request body: ${safeToken}`);
+
+  try {
+    const data = await makeNativeHttpRequest(url.toString(), apiToken);
+    logger.info(`Got ${data.pages?.length || 0} pages out of ${data.totalCount} total`);
+
+    const pagesCount = data.pages?.length || 0;
+    const totalCount = data.totalCount || 0;
+    const startIndex = (page - 1) * limit + 1;
+    const endIndex = Math.min(startIndex + pagesCount - 1, totalCount);
+
+    let resultText = '';
+    if (pagesCount === 0) {
+      resultText = `No pages found under path: ${path}`;
+    } else {
+      resultText = `Found ${pagesCount} pages under path: ${path}\n\n`;
+      data.pages.forEach((p: any) => {
+        resultText += `- ${p.path}\n`;
+      });
+      resultText += `\nShowing ${startIndex}-${endIndex} of ${totalCount} total pages`;
     }
-    
-    const url = new URL(`${apiUrl}/_api/v3/pages/list`);
-    url.searchParams.append('path', path);
-    url.searchParams.append('limit', String(limit));
-    url.searchParams.append('page', String(page));
-    
-    // アクセストークンはリクエストボディで送信
-    const urlString = url.toString();
-    const postData = `access_token=${encodeURIComponent(apiToken)}`;
-    
-    const parsedUrl = new URL(urlString);
-    
-    // curlと同じリクエストオプション
-    const options = {
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
-      path: `${parsedUrl.pathname}${parsedUrl.search}`,
-      method: 'GET',
-      headers: {
-        'User-Agent': 'curl/8.7.1',
-        'Accept': '*/*',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(postData)
-      }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: resultText,
+        },
+      ],
     };
-    
-    // トークンを隠した形でログ出力
-    const safeToken = apiToken.substring(0, 5) + '...';
-    logger.info(`Direct curl request: ${parsedUrl.protocol}//${parsedUrl.hostname}${options.path}`);
-    logger.info(`Sending access_token in request body: ${safeToken}`);
-    
-    // HTTPリクエスト実行
-    const protocol = parsedUrl.protocol === 'https:' ? https : http;
-    const req = protocol.request(options, (res) => {
-      logger.info(`Response status: ${res.statusCode}`);
-      
-      let data = '';
-      res.on('data', (chunk) => {
-        data += chunk.toString();
-      });
-      
-      res.on('end', () => {
-        logger.info(`Response completed. Data length: ${data.length}`);
-        
-        if (res.statusCode === 200) {
-          try {
-            const jsonData = JSON.parse(data);
-            logger.info(`Got ${jsonData.pages?.length || 0} pages out of ${jsonData.totalCount} total`);
-            
-            // 結果をMCPツール用に整形
-            const pagesCount = jsonData.pages?.length || 0;
-            const totalCount = jsonData.totalCount || 0;
-            const startIndex = (page - 1) * limit + 1;
-            const endIndex = Math.min(startIndex + pagesCount - 1, totalCount);
-            
-            let resultText = '';
-            if (pagesCount === 0) {
-              resultText = `No pages found under path: ${path}`;
-            } else {
-              resultText = `Found ${pagesCount} pages under path: ${path}\n\n`;
-              jsonData.pages.forEach((page: any, index: number) => {
-                resultText += `- ${page.path}\n`;
-              });
-              
-              resultText += `\nShowing ${startIndex}-${endIndex} of ${totalCount} total pages`;
-            }
-            
-            resolve({
-              content: [
-                {
-                  type: 'text',
-                  text: resultText,
-                },
-              ],
-            });
-          } catch (error) {
-            logger.error('Failed to parse JSON response:', error instanceof Error ? error.message : String(error));
-            reject(error);
-          }
-        } else {
-          logger.error(`HTTP Error: ${res.statusCode} - ${data}`);
-          resolve({
-            content: [
-              {
-                type: 'text',
-                text: `Error listing pages (path: ${path}, offset: ${(page-1) * limit}): HTTP Error (${res.statusCode}) - ${data}`,
-              },
-            ],
-          });
-        }
-      });
-    });
-    
-    req.on('error', (error) => {
-      logger.error(`Request error: ${error.message}`);
-      reject(error);
-    });
-    
-    // Send the request with the access token in the body
-    req.write(postData);
-    req.end();
-  });
+  } catch (error) {
+    logger.error(`HTTP request failed: ${error instanceof Error ? error.message : String(error)}`);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error listing pages (path: ${path}, offset: ${(page - 1) * limit}): ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+    };
+  }
 }
 
 // Register tools - this is for the MCP 'tools/list' method
